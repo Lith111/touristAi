@@ -1,0 +1,392 @@
+ممتاز! دعنا نستمر في تفصيل جميع النماذج مع العلاقات والحقول بشكل كامل.
+
+## 🗃️ **التصميم المفصل لقاعدة البيانات**
+
+### **1. نموذج المستخدم (User)**
+```python
+class User(AbstractUser):
+    USER_ROLES = (
+        ('user', 'مستخدم عادي'),
+        ('admin', 'مدير النظام'),
+    )
+    
+    role = models.CharField(max_length=10, choices=USER_ROLES, default='user')
+    phone = models.CharField(max_length=15, blank=True, null=True)
+    date_of_birth = models.DateField(blank=True, null=True)
+    nationality = models.CharField(max_length=50, blank=True, null=True)
+    passport_number = models.CharField(max_length=20, blank=True, null=True)
+    preferences = models.JSONField(default=dict, blank=True)  # تفضيلات السفر
+    is_verified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'users'
+        verbose_name = 'مستخدم'
+        verbose_name_plural = 'المستخدمون'
+```
+
+### **2. نموذج الوجهة (Destination)**
+```python
+class Destination(models.Model):
+    DESTINATION_TYPES = (
+        ('city', 'مدينة'),
+        ('historical', 'موقع تاريخي'),
+        ('natural', 'موقع طبيعي'),
+        ('coastal', 'ساحلي'),
+    )
+    
+    name = models.CharField(max_length=100)
+    type = models.CharField(max_length=20, choices=DESTINATION_TYPES)
+    description = models.TextField()
+    governorate = models.CharField(max_length=50)  # المحافظة
+    latitude = models.FloatField()
+    longitude = models.FloatField()
+    popularity_score = models.IntegerField(default=0)
+    best_season = models.CharField(max_length=100)  # المواسم المناسبة
+    image_url = models.URLField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'destinations'
+        indexes = [
+            models.Index(fields=['governorate', 'type']),
+            models.Index(fields=['popularity_score']),
+        ]
+```
+
+### **3. نموذج الخدمة (Service)**
+```python
+class Service(models.Model):
+    SERVICE_TYPES = (
+        ('hotel', 'فندق'),
+        ('transport', 'مواصلات'),
+        ('restaurant', 'مطعم'),
+        ('activity', 'نشاط ترفيهي'),
+        ('guide', 'مرشد سياحي'),
+    )
+    
+    SERVICE_LEVELS = (
+        ('economy', 'اقتصادي'),
+        ('standard', 'قياسي'),
+        ('premium', 'متميز'),
+        ('luxury', 'فاخر'),
+    )
+    
+    name = models.CharField(max_length=200)
+    type = models.CharField(max_length=20, choices=SERVICE_TYPES)
+    level = models.CharField(max_length=15, choices=SERVICE_LEVELS, default='standard')
+    description = models.TextField()
+    destination = models.ForeignKey(Destination, on_delete=models.CASCADE, related_name='services')
+    address = models.TextField()
+    contact_phone = models.CharField(max_length=15, blank=True, null=True)
+    contact_email = models.EmailField(blank=True, null=True)
+    price_per_unit = models.DecimalField(max_digits=10, decimal_places=2)
+    unit_description = models.CharField(max_length=100)  # "ليلة", "رحلة", "وجبة"
+    capacity = models.IntegerField(blank=True, null=True)  # السعة الاستيعابية
+    features = models.JSONField(default=list)  # المميزات ["واي فاي", "مسبح", ...]
+    rating = models.FloatField(default=0.0)
+    image_urls = models.JSONField(default=list)  # قائمة صور الخدمة
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'services'
+        indexes = [
+            models.Index(fields=['type', 'level']),
+            models.Index(fields=['destination', 'type']),
+        ]
+```
+
+### **4. نموذج الباقة (Package)**
+```python
+class Package(models.Model):
+    PACKAGE_TYPES = (
+        ('family', 'عائلية'),
+        ('adventure', 'مغامرة'),
+        ('cultural', 'ثقافية'),
+        ('honeymoon', 'شهر عسل'),
+        ('religious', 'دينية'),
+    )
+    
+    title = models.CharField(max_length=200)
+    type = models.CharField(max_length=20, choices=PACKAGE_TYPES)
+    description = models.TextField()
+    short_description = models.CharField(max_length=300)
+    duration_days = models.PositiveIntegerField()
+    base_price = models.DecimalField(max_digits=10, decimal_places=2)
+    discount_price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    destinations = models.ManyToManyField(Destination, through='PackageDestination')
+    services = models.ManyToManyField(Service, through='PackageService')
+    included_services = models.JSONField(default=list)  # الخدمات المشمولة
+    excluded_services = models.JSONField(default=list)  # الخدمات غير المشمولة
+    daily_schedule = models.JSONField()  # {اليوم1: {صباح: نشاط, ظهر: نشاط, مساء: نشاط}}
+    terms_conditions = models.TextField()
+    cancellation_policy = models.TextField()
+    image_urls = models.JSONField(default=list)
+    popularity_count = models.IntegerField(default=0)
+    is_featured = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'packages'
+        indexes = [
+            models.Index(fields=['type', 'is_active']),
+            models.Index(fields=['base_price']),
+        ]
+```
+
+### **5. نموذج وسيط الباقة والوجهة (PackageDestination)**
+```python
+class PackageDestination(models.Model):
+    package = models.ForeignKey(Package, on_delete=models.CASCADE)
+    destination = models.ForeignKey(Destination, on_delete=models.CASCADE)
+    visit_order = models.PositiveIntegerField()  # ترتيب الزيارة
+    duration_hours = models.PositiveIntegerField()  # مدة البقاء
+    description = models.TextField(blank=True, null=True)  # وصف الزيارة
+
+    class Meta:
+        db_table = 'package_destinations'
+        unique_together = ['package', 'destination']
+        ordering = ['visit_order']
+```
+
+### **6. نموذج وسيط الباقة والخدمة (PackageService)**
+```python
+class PackageService(models.Model):
+    TIME_SLOTS = (
+        ('morning', 'صباح'),
+        ('afternoon', 'بعد الظهر'),
+        ('evening', 'مساء'),
+    )
+    
+    package = models.ForeignKey(Package, on_delete=models.CASCADE)
+    service = models.ForeignKey(Service, on_delete=models.CASCADE)
+    day_number = models.PositiveIntegerField()  # اليوم في الرحلة
+    time_slot = models.CharField(max_length=10, choices=TIME_SLOTS)
+    quantity = models.PositiveIntegerField(default=1)
+    notes = models.TextField(blank=True, null=True)
+
+    class Meta:
+        db_table = 'package_services'
+        ordering = ['day_number', 'time_slot']
+```
+
+### **7. نموذج جلسة المحادثة (ChatSession)**
+```python
+class ChatSession(models.Model):
+    SESSION_STATUS = (
+        ('active', 'نشطة'),
+        ('plan_generated', 'تم توليد الخطة'),
+        ('price_quoted', 'تم التسعير'),
+        ('completed', 'مكتملة'),
+        ('cancelled', 'ملغاة'),
+    )
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='chat_sessions')
+    session_id = models.CharField(max_length=100, unique=True)
+    initial_requirements = models.JSONField(default=dict)  # المتطلبات الأولية
+    conversation_history = models.JSONField(default=list)  # سجل المحادثة
+    extracted_preferences = models.JSONField(default=dict)  # التفضيلات المستخلصة
+    generated_plan = models.JSONField(default=dict)  # الخطة المولدة
+    budget_range = models.JSONField(default=dict)  # {min: X, max: Y}
+    duration_days = models.PositiveIntegerField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=SESSION_STATUS, default='active')
+    estimated_price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    final_price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    expires_at = models.DateTimeField()  # انتهاء الجلسة
+
+    class Meta:
+        db_table = 'chat_sessions'
+        indexes = [
+            models.Index(fields=['user', 'status']),
+            models.Index(fields=['expires_at']),
+        ]
+```
+
+### **8. نموذج الرحلة المخصصة (CustomTrip)**
+```python
+class CustomTrip(models.Model):
+    TRIP_STATUS = (
+        ('draft', 'مسودة'),
+        ('quoted', 'مسعر'),
+        ('confirmed', 'مؤكد'),
+        ('booked', 'محجوز'),
+        ('completed', 'مكتمل'),
+        ('cancelled', 'ملغى'),
+    )
+    
+    chat_session = models.OneToOneField(ChatSession, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='custom_trips')
+    title = models.CharField(max_length=200)
+    destinations = models.ManyToManyField(Destination, through='CustomTripDestination')
+    services = models.ManyToManyField(Service, through='CustomTripService')
+    duration_days = models.PositiveIntegerField()
+    total_price = models.DecimalField(max_digits=10, decimal_places=2)
+    daily_plan = models.JSONField()  # الخطة اليومية التفصيلية
+    included_services = models.JSONField(default=list)
+    special_requests = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=15, choices=TRIP_STATUS, default='draft')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'custom_trips'
+```
+
+### **9. نموذج الحجز (Booking)**
+```python
+class Booking(models.Model):
+    BOOKING_TYPES = (
+        ('package', 'باقة جاهزة'),
+        ('custom', 'رحلة مخصصة'),
+    )
+    
+    BOOKING_STATUS = (
+        ('pending', 'قيد الانتظار'),
+        ('confirmed', 'مؤكد'),
+        ('paid', 'مدفوع'),
+        ('active', 'نشط'),
+        ('completed', 'مكتمل'),
+        ('cancelled', 'ملغى'),
+        ('refunded', 'تم الاسترداد'),
+    )
+    
+    booking_number = models.CharField(max_length=20, unique=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='bookings')
+    booking_type = models.CharField(max_length=10, choices=BOOKING_TYPES)
+    package = models.ForeignKey(Package, on_delete=models.CASCADE, blank=True, null=True)
+    custom_trip = models.ForeignKey(CustomTrip, on_delete=models.CASCADE, blank=True, null=True)
+    status = models.CharField(max_length=15, choices=BOOKING_STATUS, default='pending')
+    total_price = models.DecimalField(max_digits=10, decimal_places=2)
+    number_of_travelers = models.PositiveIntegerField(default=1)
+    traveler_details = models.JSONField(default=list)  # تفاصيل المسافرين
+    special_requests = models.TextField(blank=True, null=True)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    booking_date = models.DateTimeField(auto_now_add=True)
+    confirmation_date = models.DateTimeField(blank=True, null=True)
+    cancellation_date = models.DateTimeField(blank=True, null=True)
+    cancellation_reason = models.TextField(blank=True, null=True)
+
+    class Meta:
+        db_table = 'bookings'
+        indexes = [
+            models.Index(fields=['user', 'status']),
+            models.Index(fields=['booking_number']),
+            models.Index(fields=['start_date', 'end_date']),
+        ]
+```
+
+### **10. نموذج الدفع (Payment)**
+```python
+class Payment(models.Model):
+    PAYMENT_STATUS = (
+        ('pending', 'قيد الانتظار'),
+        ('processing', 'قيد المعالجة'),
+        ('completed', 'مكتمل'),
+        ('failed', 'فاشل'),
+        ('refunded', 'تم الاسترداد'),
+        ('cancelled', 'ملغى'),
+    )
+    
+    PAYMENT_METHODS = (
+        ('credit_card', 'بطاقة ائتمان'),
+        ('debit_card', 'بطاقة خصم'),
+        ('bank_transfer', 'تحويل بنكي'),
+        ('digital_wallet', 'محفظة إلكترونية'),
+    )
+    
+    payment_number = models.CharField(max_length=20, unique=True)
+    booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name='payments')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHODS)
+    status = models.CharField(max_length=15, choices=PAYMENT_STATUS, default='pending')
+    transaction_id = models.CharField(max_length=100, blank=True, null=True)
+    payment_gateway_response = models.JSONField(blank=True, null=True)  # رد بوابة الدفع
+    payment_date = models.DateTimeField(blank=True, null=True)
+    refund_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    refund_date = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'payments'
+        indexes = [
+            models.Index(fields=['payment_number']),
+            models.Index(fields=['booking', 'status']),
+        ]
+```
+
+### **11. نموذج المراجعة (Review)**
+```python
+class Review(models.Model):
+    RATING_CHOICES = [
+        (1, '1 نجمة'),
+        (2, '2 نجمتين'),
+        (3, '3 نجوم'),
+        (4, '4 نجوم'),
+        (5, '5 نجوم'),
+    ]
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reviews')
+    package = models.ForeignKey(Package, on_delete=models.CASCADE, blank=True, null=True)
+    custom_trip = models.ForeignKey(CustomTrip, on_delete=models.CASCADE, blank=True, null=True)
+    rating = models.PositiveIntegerField(choices=RATING_CHOICES)
+    title = models.CharField(max_length=200, blank=True, null=True)
+    comment = models.TextField()
+    is_verified = models.BooleanField(default=False)  # مراجعة من حجز فعلي
+    helpful_count = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'reviews'
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(package__isnull=False) | 
+                    models.Q(custom_trip__isnull=False)
+                ),
+                name='review_has_target'
+            )
+        ]
+```
+
+---
+
+## 🔗 **العلاقات الرئيسية بين النماذج:**
+
+```
+User
+ ├── ChatSession (One-to-Many)
+ ├── CustomTrip (One-to-Many) 
+ ├── Booking (One-to-Many)
+ └── Review (One-to-Many)
+
+Package
+ ├── PackageDestination (Many-to-Many through)
+ ├── PackageService (Many-to-Many through)
+ ├── Booking (One-to-Many)
+ └── Review (One-to-Many)
+
+ChatSession
+ └── CustomTrip (One-to-One)
+
+CustomTrip
+ ├── CustomTripDestination (Many-to-Many through)
+ ├── CustomTripService (Many-to-Many through)
+ ├── Booking (One-to-Many)
+ └── Review (One-to-Many)
+
+Booking
+ └── Payment (One-to-Many)
+```
+
+**هل تريد أن أضيف أي نماذج إضافية أو تعديل في التصميم الحالي؟ أم ننتقل لتصميم واجهات الـAPI؟**
